@@ -159,12 +159,17 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-
-  // MILK CALCULATION + NOTIFICATION
+  // ------------------------------------------------------
+  // 🆕 MILK CALCULATION + MONTH END NOTIFICATION
+  // ------------------------------------------------------
   void calculateMilk() async {
     milkTotal = milkPerDay * 30;
 
-    if (milkTotal >= 2400 && !notificationDone) {
+    DateTime now = DateTime.now();
+    int lastDay = DateTime(now.year, now.month + 1, 0).day;
+
+    /// notify only on last day of month
+    if (now.day == lastDay && !notificationDone) {
       NotifyService.showMilkAlert(milkTotal);
       final prefs = await SharedPreferences.getInstance();
       prefs.setBool("milkAlertSent", true);
