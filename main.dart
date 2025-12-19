@@ -100,18 +100,18 @@ class _DashboardState extends State<Dashboard> {
 
   // ASK USER NAME
   void askName() {
-    TextEditingController name = TextEditingController();
+    TextEditingController name = TextEditingController(text: userName);
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) {
         return _prettyDialog(
-          title: "Welcome!",
+          title: "Enter / Edit Name",
           child: TextField(
             controller: name,
             decoration: const InputDecoration(
-              labelText: "Enter your name",
+              labelText: "Your name",
               prefixIcon: Icon(Icons.person),
             ),
           ),
@@ -119,8 +119,12 @@ class _DashboardState extends State<Dashboard> {
             if (name.text.isEmpty) return;
             final prefs = await SharedPreferences.getInstance();
             prefs.setString("name", name.text);
+
+            userName = name.text;
+            setState(() {});
             Navigator.pop(context);
-            askMilkPrice();
+
+            if (milkPerDay == 0) askMilkPrice();
           },
         );
       },
@@ -129,14 +133,14 @@ class _DashboardState extends State<Dashboard> {
 
   // ASK MILK PRICE
   void askMilkPrice() {
-    TextEditingController price = TextEditingController();
+    TextEditingController price = TextEditingController(text: milkPerDay.toString());
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) {
         return _prettyDialog(
-          title: "Milk Setup",
+          title: "Enter / Edit Milk Price",
           child: TextField(
             controller: price,
             decoration: const InputDecoration(
@@ -159,16 +163,13 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  // ------------------------------------------------------
-  // 🆕 MILK CALCULATION + MONTH END NOTIFICATION
-  // ------------------------------------------------------
+  // MILK CALCULATION
   void calculateMilk() async {
     milkTotal = milkPerDay * 30;
 
     DateTime now = DateTime.now();
     int lastDay = DateTime(now.year, now.month + 1, 0).day;
 
-    /// notify only on last day of month
     if (now.day == lastDay && !notificationDone) {
       NotifyService.showMilkAlert(milkTotal);
       final prefs = await SharedPreferences.getInstance();
@@ -247,17 +248,14 @@ class _DashboardState extends State<Dashboard> {
       appBar: AppBar(
         title: Text("Hi, $userName 👋"),
         actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => AllExpensesScreen(baseUrl: baseUrl),
-                ),
-              );
-            },
-            child: const Text("All Expenses"),
-          )
+          IconButton(
+            icon: const Icon(Icons.edit),
+            onPressed: askName,
+          ),
+          IconButton(
+            icon: const Icon(Icons.local_drink),
+            onPressed: askMilkPrice,
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -279,6 +277,7 @@ class _DashboardState extends State<Dashboard> {
                     subtitle: "₹${milkPerDay.toStringAsFixed(0)} / day",
                     icon: Icons.local_drink,
                     colors: [Colors.lightBlue.shade300, Colors.blue.shade600],
+                    onTap: askMilkPrice,
                   ),
                   const SizedBox(height: 14),
                   _featureCard(
@@ -388,7 +387,9 @@ Widget _prettyDialog({
   );
 }
 
-// ALL EXPENSES SCREEN
+// ------------------------------------------------------
+// ALL EXPENSES SCREEN (DELETE ADDED)
+// ------------------------------------------------------
 class AllExpensesScreen extends StatefulWidget {
   final String baseUrl;
   const AllExpensesScreen({super.key, required this.baseUrl});
@@ -429,7 +430,19 @@ class _AllExpensesScreenState extends State<AllExpensesScreen> {
                     : Icons.local_drink,
               ),
               title: Text(expenses[i]["item"]),
-              trailing: Text("₹${expenses[i]["amount"]}"),
+              subtitle: Text("₹${expenses[i]["amount"]}"),
+
+              trailing: expenses[i]["category"] == "Grocery"
+                  ? IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      onPressed: () async {
+                        await http.delete(
+                          Uri.parse("${widget.baseUrl}/delete/${expenses[i]['id']}"),
+                        );
+                        fetchData();
+                      },
+                    )
+                  : null,
             ),
           );
         },
