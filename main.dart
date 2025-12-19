@@ -52,7 +52,7 @@ class NotifyService {
     await _notifications.show(
       0,
       "Milk Bill Alert 🥛",
-      "Your milk cost reached ₹${total.toStringAsFixed(0)} this month.",
+      "Your milk cost is ₹${total.toStringAsFixed(0)} this month.",
       details,
     );
   }
@@ -107,7 +107,7 @@ class _DashboardState extends State<Dashboard> {
       barrierDismissible: false,
       builder: (_) {
         return _prettyDialog(
-          title: "Enter / Edit Name",
+          title: "Enter Name",
           child: TextField(
             controller: name,
             decoration: const InputDecoration(
@@ -140,7 +140,7 @@ class _DashboardState extends State<Dashboard> {
       barrierDismissible: false,
       builder: (_) {
         return _prettyDialog(
-          title: "Enter / Edit Milk Price",
+          title: "Enter Milk Price",
           child: TextField(
             controller: price,
             decoration: const InputDecoration(
@@ -162,6 +162,7 @@ class _DashboardState extends State<Dashboard> {
       },
     );
   }
+
 
   // MILK CALCULATION
   void calculateMilk() async {
@@ -241,6 +242,7 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
+
   // UI
   @override
   Widget build(BuildContext context) {
@@ -249,19 +251,33 @@ class _DashboardState extends State<Dashboard> {
         title: Text("Hi, $userName 👋"),
         actions: [
           IconButton(
-            icon: const Icon(Icons.edit),
+            icon: const Icon(Icons.person),
             onPressed: askName,
           ),
           IconButton(
             icon: const Icon(Icons.local_drink),
             onPressed: askMilkPrice,
           ),
+          TextButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => AllExpensesScreen(baseUrl: baseUrl),
+                ),
+              );
+            },
+            child: const Text("All Expenses"),
+          )
         ],
       ),
+
       floatingActionButton: FloatingActionButton(
         onPressed: addGrocery,
         child: const Icon(Icons.add),
       ),
+
+
       body: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(
@@ -280,13 +296,14 @@ class _DashboardState extends State<Dashboard> {
                     onTap: askMilkPrice,
                   ),
                   const SizedBox(height: 14),
+
                   _featureCard(
                     title: "Grocery",
                     amount: groceryTotal,
                     icon: Icons.shopping_cart,
                     colors: [Colors.orange.shade400, Colors.deepOrange.shade400],
                     onTap: addGrocery,
-                  )
+                  ),
                 ],
               ),
             )
@@ -368,7 +385,7 @@ class _DashboardState extends State<Dashboard> {
   }
 }
 
-// Dialog function
+// DIALOG
 Widget _prettyDialog({
   required String title,
   required Widget child,
@@ -388,7 +405,7 @@ Widget _prettyDialog({
 }
 
 // ------------------------------------------------------
-// ALL EXPENSES SCREEN (DELETE ADDED)
+// ALL EXPENSES SCREEN (DELETE ONLY HERE)
 // ------------------------------------------------------
 class AllExpensesScreen extends StatefulWidget {
   final String baseUrl;
@@ -414,6 +431,11 @@ class _AllExpensesScreenState extends State<AllExpensesScreen> {
     });
   }
 
+  Future<void> deleteItem(int id) async {
+    await http.delete(Uri.parse("${widget.baseUrl}/delete/$id"));
+    fetchData();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -432,17 +454,10 @@ class _AllExpensesScreenState extends State<AllExpensesScreen> {
               title: Text(expenses[i]["item"]),
               subtitle: Text("₹${expenses[i]["amount"]}"),
 
-              trailing: expenses[i]["category"] == "Grocery"
-                  ? IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      onPressed: () async {
-                        await http.delete(
-                          Uri.parse("${widget.baseUrl}/delete/${expenses[i]['id']}"),
-                        );
-                        fetchData();
-                      },
-                    )
-                  : null,
+              trailing: IconButton(
+                icon: const Icon(Icons.delete, color: Colors.red),
+                onPressed: () => deleteItem(expenses[i]["id"]),
+              ),
             ),
           );
         },
@@ -450,3 +465,4 @@ class _AllExpensesScreenState extends State<AllExpensesScreen> {
     );
   }
 }
+
