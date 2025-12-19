@@ -75,6 +75,19 @@ def all_expenses():
         {"item": r[0], "amount": r[1], "category": r[2]} for r in rows
     ])
 
+@app.route('/delete/<int:item_id>', methods=['DELETE'])
+def delete_item(item_id):
+    conn = sqlite3.connect("expense.db")
+    cur = conn.cursor()
+
+    cur.execute("DELETE FROM expense WHERE id=?", (item_id,))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"message": "deleted"}), 200
+
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
