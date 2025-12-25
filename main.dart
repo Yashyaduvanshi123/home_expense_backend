@@ -28,9 +28,7 @@ class HomeExpenseApp extends StatelessWidget {
   }
 }
 
-// ------------------------------------------------------
-// 🔔 NOTIFICATION SERVICE
-// ------------------------------------------------------
+// NOTIFICATION SERVICE
 class NotifyService {
   static final _notifications = FlutterLocalNotificationsPlugin();
 
@@ -58,10 +56,7 @@ class NotifyService {
   }
 }
 
-// ------------------------------------------------------
 // DASHBOARD
-// ------------------------------------------------------
-
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
 
@@ -76,6 +71,9 @@ class _DashboardState extends State<Dashboard> {
   String userName = "";
   bool notificationDone = false;
 
+  String? startDate;
+  String? billDate;
+
   final String baseUrl = "https://home-expense-backend.onrender.com";
 
   @override
@@ -89,6 +87,9 @@ class _DashboardState extends State<Dashboard> {
 
     userName = prefs.getString("name") ?? "";
     milkPerDay = prefs.getDouble("milkPerDay") ?? 0;
+    milkTotal = prefs.getDouble("milkTotalMonthly") ?? 0;
+    startDate = prefs.getString("milkStartDate");
+    billDate = prefs.getString("milkBillDate");
     notificationDone = prefs.getBool("milkAlertSent") ?? false;
 
     if (userName.isEmpty) askName();
@@ -98,7 +99,6 @@ class _DashboardState extends State<Dashboard> {
     fetchTotals();
   }
 
-  // ASK USER NAME
   void askName() {
     TextEditingController name = TextEditingController(text: userName);
 
@@ -117,6 +117,7 @@ class _DashboardState extends State<Dashboard> {
           ),
           onSave: () async {
             if (name.text.isEmpty) return;
+
             final prefs = await SharedPreferences.getInstance();
             prefs.setString("name", name.text);
 
@@ -131,7 +132,6 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  // ASK MILK PRICE
   void askMilkPrice() {
     TextEditingController price = TextEditingController(text: milkPerDay.toString());
 
@@ -155,6 +155,14 @@ class _DashboardState extends State<Dashboard> {
             final prefs = await SharedPreferences.getInstance();
             prefs.setDouble("milkPerDay", milkPerDay);
 
+            DateTime now = DateTime.now();
+            startDate = "${now.day}-${now.month}-${now.year}";
+            DateTime bill = now.add(const Duration(days: 30));
+            billDate = "${bill.day}-${bill.month}-${bill.year}";
+
+            prefs.setString("milkStartDate", startDate!);
+            prefs.setString("milkBillDate", billDate!);
+
             calculateMilk();
             Navigator.pop(context);
           },
@@ -163,17 +171,22 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-
-  // MILK CALCULATION
   void calculateMilk() async {
-    milkTotal = milkPerDay * 30;
+    final prefs = await SharedPreferences.getInstance();
+    DateTime today = DateTime.now();
+    String todayStr = "${today.year}-${today.month}-${today.day}";
+    String? lastDate = prefs.getString("lastMilkUpdate");
 
-    DateTime now = DateTime.now();
-    int lastDay = DateTime(now.year, now.month + 1, 0).day;
+    if (lastDate != todayStr) {
+      milkTotal += milkPerDay;
+      prefs.setDouble("milkTotalMonthly", milkTotal);
+      prefs.setString("lastMilkUpdate", todayStr);
+    }
 
-    if (now.day == lastDay && !notificationDone) {
+    int lastDay = DateTime(today.year, today.month + 1, 0).day;
+
+    if (today.day == lastDay && !notificationDone) {
       NotifyService.showMilkAlert(milkTotal);
-      final prefs = await SharedPreferences.getInstance();
       prefs.setBool("milkAlertSent", true);
       notificationDone = true;
     }
@@ -181,7 +194,6 @@ class _DashboardState extends State<Dashboard> {
     setState(() {});
   }
 
-  // FETCH TOTALS
   Future<void> fetchTotals() async {
     try {
       final res = await http.get(Uri.parse('$baseUrl/totals'));
@@ -190,10 +202,9 @@ class _DashboardState extends State<Dashboard> {
       setState(() {
         groceryTotal = data["grocery"] ?? 0;
       });
-    } catch (e) {}
+    } catch (_) {}
   }
 
-  // ADD GROCERY
   void addGrocery() {
     TextEditingController item = TextEditingController();
     TextEditingController amount = TextEditingController();
@@ -242,42 +253,37 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-
-  // UI
   @override
   Widget build(BuildContext context) {
+    double monthlyProjected = milkPerDay * 30;
+
     return Scaffold(
       appBar: AppBar(
         title: Text("Hi, $userName 👋"),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.person),
-            onPressed: askName,
-          ),
-          IconButton(
-            icon: const Icon(Icons.local_drink),
-            onPressed: askMilkPrice,
-          ),
+          IconButton(icon: const Icon(Icons.person), onPressed: askName),
+          IconButton(icon: const Icon(Icons.local_drink), onPressed: askMilkPrice),
           TextButton(
-            onPressed: () {
-              Navigator.push(
+            onPressed: () async {
+              final changed = await Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (_) => AllExpensesScreen(baseUrl: baseUrl),
                 ),
               );
+
+              if (changed == true) {
+                fetchTotals();
+              }
             },
             child: const Text("All Expenses"),
-          )
+          ),
         ],
       ),
-
       floatingActionButton: FloatingActionButton(
         onPressed: addGrocery,
         child: const Icon(Icons.add),
       ),
-
-
       body: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(
@@ -290,13 +296,15 @@ class _DashboardState extends State<Dashboard> {
                   _featureCard(
                     title: "Milk",
                     amount: milkTotal,
-                    subtitle: "₹${milkPerDay.toStringAsFixed(0)} / day",
+                    running: "Running: ₹${milkTotal.toStringAsFixed(0)}",
+                    monthly: "Monthly: ₹${monthlyProjected.toStringAsFixed(0)}",
+                    startDate: startDate ?? "-",
+                    billDate: billDate ?? "-",
                     icon: Icons.local_drink,
                     colors: [Colors.lightBlue.shade300, Colors.blue.shade600],
                     onTap: askMilkPrice,
                   ),
                   const SizedBox(height: 14),
-
                   _featureCard(
                     title: "Grocery",
                     amount: groceryTotal,
@@ -346,13 +354,16 @@ class _DashboardState extends State<Dashboard> {
     required double amount,
     required IconData icon,
     required List<Color> colors,
-    String? subtitle,
     VoidCallback? onTap,
+    String? running,
+    String? monthly,
+    String? startDate,
+    String? billDate,
   }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 135,
+        height: 175,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           gradient: LinearGradient(colors: colors),
@@ -361,23 +372,42 @@ class _DashboardState extends State<Dashboard> {
         child: Row(
           children: [
             Icon(icon, color: Colors.white, size: 40),
-            const SizedBox(width: 20),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(title, style: const TextStyle(color: Colors.white70, fontSize: 17)),
-                if (subtitle != null)
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(title,
+                      style: const TextStyle(
+                          color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  if (running != null)
+                    Text(running, style: const TextStyle(color: Colors.white, fontSize: 14)),
+                  if (monthly != null)
+                    Text(monthly, style: const TextStyle(color: Colors.white, fontSize: 14)),
                   Text(
-                    subtitle,
-                    style: const TextStyle(color: Colors.white, fontSize: 15),
+                    "₹ ${amount.toStringAsFixed(0)}",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 30,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                Text(
-                  "₹ ${amount.toStringAsFixed(0)}",
-                  style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
-                ),
-              ],
-            )
+                ],
+              ),
+            ),
+            if (startDate != null && billDate != null)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text("Started:", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  Text(startDate, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                  const SizedBox(height: 4),
+                  const Text("Bill on:", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  Text(billDate, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                ],
+              )
           ],
         ),
       ),
@@ -385,7 +415,6 @@ class _DashboardState extends State<Dashboard> {
   }
 }
 
-// DIALOG
 Widget _prettyDialog({
   required String title,
   required Widget child,
@@ -396,17 +425,12 @@ Widget _prettyDialog({
     title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
     content: child,
     actions: [
-      ElevatedButton(
-        onPressed: onSave,
-        child: const Text("Save"),
-      )
+      ElevatedButton(onPressed: onSave, child: const Text("Save"))
     ],
   );
 }
 
-// ------------------------------------------------------
-// ALL EXPENSES SCREEN (DELETE ONLY HERE)
-// ------------------------------------------------------
+// ALL EXPENSES SCREEN
 class AllExpensesScreen extends StatefulWidget {
   final String baseUrl;
   const AllExpensesScreen({super.key, required this.baseUrl});
@@ -417,6 +441,7 @@ class AllExpensesScreen extends StatefulWidget {
 
 class _AllExpensesScreenState extends State<AllExpensesScreen> {
   List expenses = [];
+  bool changed = false;
 
   @override
   void initState() {
@@ -426,43 +451,53 @@ class _AllExpensesScreenState extends State<AllExpensesScreen> {
 
   Future<void> fetchData() async {
     final res = await http.get(Uri.parse("${widget.baseUrl}/all"));
-    setState(() {
-      expenses = jsonDecode(res.body);
-    });
+    setState(() => expenses = jsonDecode(res.body));
   }
 
   Future<void> deleteItem(int id) async {
     await http.delete(Uri.parse("${widget.baseUrl}/delete/$id"));
-    fetchData();
+
+    await fetchData();
+    changed = true;
+    setState(() {});
+
+    // AUTO CLOSE WHEN LAST ITEM DELETED
+    if (expenses.isEmpty) {
+      Navigator.pop(context, true);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("All Expenses")),
-      body: ListView.builder(
-        itemCount: expenses.length,
-        itemBuilder: (_, i) {
-          return Card(
-            margin: const EdgeInsets.all(10),
-            child: ListTile(
-              leading: Icon(
-                expenses[i]["category"] == "Grocery"
-                    ? Icons.shopping_cart
-                    : Icons.local_drink,
+    return WillPopScope(
+      onWillPop: () async {
+        Navigator.pop(context, changed);
+        return false;
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text("All Expenses")),
+        body: ListView.builder(
+          itemCount: expenses.length,
+          itemBuilder: (_, i) {
+            return Card(
+              margin: const EdgeInsets.all(10),
+              child: ListTile(
+                leading: Icon(
+                  expenses[i]["category"] == "Grocery"
+                      ? Icons.shopping_cart
+                      : Icons.local_drink,
+                ),
+                title: Text(expenses[i]["item"]),
+                subtitle: Text("₹${expenses[i]["amount"]}"),
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () => deleteItem(expenses[i]["id"]),
+                ),
               ),
-              title: Text(expenses[i]["item"]),
-              subtitle: Text("₹${expenses[i]["amount"]}"),
-
-              trailing: IconButton(
-                icon: const Icon(Icons.delete, color: Colors.red),
-                onPressed: () => deleteItem(expenses[i]["id"]),
-              ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
 }
-
